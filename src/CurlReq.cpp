@@ -1,4 +1,7 @@
 #include "CurlReq.hpp"
+#include <curl/curl.h>
+#include <string>
+#include <winscard.h>
 
 namespace CurlReq {
 void Connection::setup() {
@@ -23,19 +26,38 @@ void Connection::wait() {
   std::this_thread::sleep_until(now + actual_pause_time);
 }
 
-// void SETcurlData(std::string url, std::vector<std::string> headers) {
-//   struct curl_slist *headr = NULL;
-//   for (std::string header : headers) {
-//     headr = curl_slist_append(headr, header.c_str());
-//   }
-//   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headr);
-// }
+void Connection::set_http_headers(const std::vector<std::string> &headers) {
+  struct curl_slist *header_list = NULL;
+  for (std::string header : headers) {
+    header_list = curl_slist_append(header_list, header.c_str());
+  }
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
+}
 
-std::future<json> Connection::GET(std::string base_url, std::vector<std::string> headers) {
+void set_url_parameters(std::string &url, const std::vector<std::pair<std::string, std::string>> &parameters) {
+  if (!parameters.empty()) {
+    url += "?";
+  }
+
+  bool first = true;
+  for(const auto &parameter : parameters) {
+    if (first) first = false;
+    else url += "&";
+
+    url += parameter.first + "=" + parameter.second;
+  }
+}
+
+
+std::future<tl::expected<json, int>> Connection::GET(std::string base_url, const std::vector<std::string> &headers, const std::vector<std::pair<std::string, std::string>> &parameters) {
+  std::function<tl::expected<json, int>()> fn = [&]() -> tl::expected<json, int> {
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    set_url_parameters(base_url, parameters);
     curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
-//   SETcurlData(https, headers);
+    set_http_headers(headers);
+
     CURLcode response = curl_easy_perform(curl);
+
     if (response != CURLE_OK) {
         // std::cerr << "GET failed: " << curl_easy_strerror(response) << std::endl;
         response_string.clear();
@@ -48,46 +70,49 @@ std::future<json> Connection::GET(std::string base_url, std::vector<std::string>
         response_string.clear();
         return data;
         } catch (nlohmann::json::parse_error &err) {
-        return json{};
+          return json{};
         }
     }
-}
+  };
 
-// Connection
-Connection::Connection() {
-  worker = std::thread([this] { QueueUnloading(); });
-}
-Connection::~Connection() {
-  cv.notify_one();
-  worker.join();
-}
-void Connection::QueueUnloading() {
-  Task task;
-  while (true) {
-    std::unique_lock<std::mutex> lock(thread_lock);
-    cv.wait(lock, [&] { return !tasks.empty();});
-    task = std::move(tasks.front());
-    tasks.pop();
-    cv.notify_all();
-    json result = task.work();
-    task.promise.set_value(result);
-    CurlReq::wait();
-  }
-}
-
-std::future<json> Connection::Add(std::function<json()> f) {
-  Task task;
-  task.work = std::move(f);
-  std::future<json> future = task.promise.get_future();
+  std::promise<tl::expected<json, int>> promise;
+  std::future<tl::expected<json, int>> future = promise.get_future();
+  Task task{ fn, std::move(promise) };
   {
     std::lock_guard<std::mutex> lock(thread_lock);
     tasks.push(std::move(task));
   }
   cv.notify_one();
+  
   return future;
 }
+
+Connection::Connection() {
+  worker = std::thread([this] { QueueUnloading(); });
+}
+Connection::~Connection() {
+  disconnect();
+  WaitUntilQueueEmpty();
+  cv.notify_one();
+  worker.join();
+}
+
+void Connection::QueueUnloading() {
+  while (true) {
+    std::unique_lock<std::mutex> lock(thread_lock);
+    cv.wait(lock, [&] { return !tasks.empty();});
+    Task task = std::move(tasks.front());
+    tasks.pop();
+    auto result = task.work();
+    task.promise.set_value(result);
+    cv.notify_all();
+    wait();
+  }
+}
+
 void Connection::WaitUntilQueueEmpty() {
   std::unique_lock<std::mutex> lock(thread_lock);
   cv.wait(lock, [&] { return tasks.empty(); });
 }
+
 } // namespace CurlReq

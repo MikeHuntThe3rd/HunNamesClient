@@ -1,7 +1,7 @@
 #include "CurlReq.hpp"
 
 namespace CurlReq {
-void setup() {
+void Connection::setup() {
   curl_global_init(CURL_GLOBAL_DEFAULT);
   curl = curl_easy_init();
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
@@ -9,19 +9,12 @@ void setup() {
   curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
   curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 }
-void disconnect() {
+void Connection::disconnect() {
   curl_easy_cleanup(curl);
   curl_global_cleanup();
 }
 
-size_t WriteCallback(void *contents, size_t size, size_t nmemb,
-                     std::string *data) {
-  size_t total_size = size * nmemb;
-  data->append((char *)contents, total_size);
-  return total_size;
-}
-
-void wait() {
+void Connection::wait() {
   auto now = std::chrono::steady_clock::now();
   auto phase =
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start) %
@@ -30,17 +23,17 @@ void wait() {
   std::this_thread::sleep_until(now + actual_pause_time);
 }
 
-void SETcurlData(std::string url, std::vector<std::string> headers) {
-  struct curl_slist *headr = NULL;
-  for (std::string header : headers) {
-    headr = curl_slist_append(headr, header.c_str());
-  }
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headr);
-}
+// void SETcurlData(std::string url, std::vector<std::string> headers) {
+//   struct curl_slist *headr = NULL;
+//   for (std::string header : headers) {
+//     headr = curl_slist_append(headr, header.c_str());
+//   }
+//   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headr);
+// }
 
-json __GET(std::string url, std::vector<std::string> headers) {
+std::future<json> Connection::GET(std::string base_url, std::vector<std::string> headers) {
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
 //   SETcurlData(https, headers);
     CURLcode response = curl_easy_perform(curl);
     if (response != CURLE_OK) {

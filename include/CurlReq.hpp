@@ -13,33 +13,37 @@
 
 using json = nlohmann::json;
 namespace CurlReq {
-// variables
-inline CURL *curl = nullptr;
-inline std::string response_string;
-inline std::chrono::steady_clock::time_point start{
-    std::chrono::steady_clock::now()};
-inline std::chrono::milliseconds interval{1000};
-// functions
-void setup();
-void disconnect();
-void wait();
-void SETcurlData(std::string url, std::vector<std::string> headers);
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb,
-                            std::string *data);
-// methods
-json __GET(std::string https, std::vector<std::string> headers = {
-                                  "accept: application/json", "Language: en"});
+
 class Connection {
 public:
   Connection();
   ~Connection();
+  std::future<json> GET(std::string base_url, std::vector<std::string> headers = {
+                                  "accept: application/json", "Language: en"});
   std::future<json> Add(std::function<json()> f);
   
   private:
-  struct Task {
+    CURL *curl = nullptr;
+    std::string response_string;
+    std::chrono::steady_clock::time_point start{
+    std::chrono::steady_clock::now()};
+    std::chrono::milliseconds interval{1000};
+
+    struct Task {
       std::function<json()> work;
       std::promise<json> promise;
     };
+
+    static size_t WriteCallback(void *contents, size_t size, size_t nmemb,
+                                std::string *data) {
+        size_t total_size = size * nmemb;
+        data->append((char *)contents, total_size);
+        return total_size;
+    }
+    void setup();
+    void disconnect();
+    void wait();
+    // void SETcurlData(std::string url, std::vector<std::string> headers);
     
     void WaitUntilQueueEmpty();
     std::queue<Task> tasks;
@@ -49,4 +53,5 @@ public:
 
     void QueueUnloading();
 };
+
 } // namespace CurlReq

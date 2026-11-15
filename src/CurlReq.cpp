@@ -1,5 +1,6 @@
 #include "CurlReq.hpp"
 #include <curl/curl.h>
+#include <curl/easy.h>
 #include <string>
 #include <winscard.h>
 
@@ -58,20 +59,26 @@ std::future<tl::expected<json, int>> Connection::GET(std::string base_url, const
 
     CURLcode response = curl_easy_perform(curl);
 
-    if (response != CURLE_OK) {
-        // std::cerr << "GET failed: " << curl_easy_strerror(response) << std::endl;
-        response_string.clear();
-        return json{};
-    } else if (response_string.length() == 0) {
-        return json{};
-    } else {
-        try {
-        json data = json::parse(response_string);
-        response_string.clear();
-        return data;
-        } catch (nlohmann::json::parse_error &err) {
-          return json{};
+    switch (response) {
+      case CURLcode::CURLE_OK: {
+        long status_code;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+        if (status_code != 200) {
+          return status_code;
         }
+
+        try {
+          json data = json::parse(response_string);
+          response_string.clear();
+          return data;
+        } catch (nlohmann::json::parse_error &err) {
+          return -1;
+        }
+      }
+      default:
+      {
+        return -1;
+      }
     }
   };
 

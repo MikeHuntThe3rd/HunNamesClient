@@ -21,7 +21,7 @@ class Connection {
 public:
   Connection();
   ~Connection();
-  std::future<tl::expected<json, GETERR>>
+  std::future<tl::expected<json, types::GETERR>>
   GET(std::string base_url, const std::vector<std::string> &headers,
       const std::vector<std::pair<std::string, std::string>> &parameters);
 
@@ -29,11 +29,11 @@ private:
   CURL *curl = nullptr;
   bool stop = false;
   struct Task {
-    std::function<tl::expected<json, GETERR>()> work;
-    std::promise<tl::expected<json, GETERR>> promise;
+    std::function<tl::expected<json, types::GETERR>()> work;
+    std::promise<tl::expected<json, types::GETERR>> promise;
 
-    Task(std::function<tl::expected<json, GETERR>()> work,
-         std::promise<tl::expected<json, GETERR>> promise)
+    Task(std::function<tl::expected<json, types::GETERR>()> work,
+         std::promise<tl::expected<json, types::GETERR>> promise)
         : work(work), promise(std::move(promise)) {};
   };
 

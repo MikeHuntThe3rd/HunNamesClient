@@ -63,11 +63,11 @@ void Connection::set_url_parameters(
   }
 }
 
-std::future<tl::expected<json, GETERR>> Connection::GET(
+std::future<tl::expected<json, types::GETERR>> Connection::GET(
     std::string base_url, const std::vector<std::string> &headers,
     const std::vector<std::pair<std::string, std::string>> &parameters) {
-  std::function<tl::expected<json, GETERR>()> fn =
-      [=]() mutable -> tl::expected<json, GETERR> {
+  std::function<tl::expected<json, types::GETERR>()> fn =
+      [=]() mutable -> tl::expected<json, types::GETERR> {
     response_string.clear();
 
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
@@ -85,24 +85,24 @@ std::future<tl::expected<json, GETERR>> Connection::GET(
       long status_code;
       curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
       if (status_code != 200) {
-        return tl::make_unexpected(GETERR::NON200);
+        return tl::make_unexpected(types::GETERR::NON200);
       }
 
       try {
         json data = json::parse(response_string);
         return data;
       } catch (nlohmann::json::parse_error &err) {
-        return tl::make_unexpected(GETERR::FAILEDPARSE);
+        return tl::make_unexpected(types::GETERR::FAILEDPARSE);
       }
     }
     default: {
-      return tl::make_unexpected(GETERR::CURLFAILURE);
+      return tl::make_unexpected(types::GETERR::CURLFAILURE);
     }
     }
   };
 
-  std::promise<tl::expected<json, GETERR>> promise;
-  std::future<tl::expected<json, GETERR>> future = promise.get_future();
+  std::promise<tl::expected<json, types::GETERR>> promise;
+  std::future<tl::expected<json, types::GETERR>> future = promise.get_future();
   Task task{fn, std::move(promise)};
   {
     std::lock_guard<std::mutex> lock(thread_lock);
